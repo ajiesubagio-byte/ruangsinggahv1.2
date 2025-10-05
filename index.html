@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Booking Kamar - Demo</title>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;margin:16px;background:#f7fbff}
+    .card{background:white;padding:12px;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:12px}
+    label{display:block;margin-top:8px}
+    input,select,button{padding:8px;margin-top:4px;width:100%;box-sizing:border-box}
+    table{width:100%;border-collapse:collapse;margin-top:8px}
+    th,td{padding:8px;border:1px solid #eee;text-align:left}
+    .row{display:flex;gap:12px}
+    .col{flex:1}
+  </style>
+</head>
+<body>
+  <h2>Booking Kamar</h2>
+
+  <div class="card">
+    <h3>Tambah Booking</h3>
+    <div>
+      <label>Nama Customer <input id="customer" /></label>
+      <label>Nomor Kamar <input id="room" /></label>
+      <div class="row">
+        <div class="col"><label>Tanggal Masuk <input type="date" id="checkInDate" /></label></div>
+        <div class="col"><label>Jam Masuk <input type="time" id="checkInTime" /></label></div>
+        <div class="col"><label>Jam Keluar <input type="time" id="checkOutTime" /></label></div>
+      </div>
+      <label>Harga (angka) <input id="price" type="number" step="0.01" /></label>
+      <button id="btnAdd">Simpan Booking</button>
+      <div id="addMsg"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Filter & Daftar Booking</h3>
+    <div class="row">
+      <div class="col"><label>Filter Tanggal Masuk <input type="date" id="filterDate" /></label></div>
+      <div class="col"><label>Nomor Kamar <select id="filterRoom"><option value="">-- Semua --</option></select></label></div>
+      <div style="width:160px"><button id="btnLoad">Muat</button></div>
+    </div>
+
+    <table id="tbl">
+      <thead><tr><th>ID</th><th>Nama</th><th>Kamar</th><th>Tgl Masuk</th><th>Jam Masuk</th><th>Jam Keluar</th><th>Harga</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>Laporan Keuangan</h3>
+    <div class="row">
+      <div class="col"><label>Start <input type="date" id="rStart" /></label></div>
+      <div class="col"><label>End <input type="date" id="rEnd" /></label></div>
+      <div style="width:160px"><button id="btnReport">Generate</button></div>
+    </div>
+    <div id="report"></div>
+  </div>
+
+<script>
+// Ganti URL_WEBAPP dengan URL Deployment Web App Apps Script-mu
+const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxRq2YZUi-hdk5QjyJO3eqAy1VVTg79b1k7QdaiFeJwFFdeIGXvt--IHrTyPTQWqm9nXw/exec';
+
+function jsonpCall(params){
+  return new Promise(function(resolve,reject){
+    var cbName = 'cb_' + Math.random().toString(36).substr(2,9);
+    window[cbName] = function(data){
+      delete window[cbName];
+      script.remove();
+      resolve(data);
+    };
+    var qs = Object.keys(params).map(function(k){
+      return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+    }).join('&');
+    qs += '&callback=' + cbName;
+    var script = document.createElement('script');
+    script.src = WEBAPP_URL + '?' + qs;
+    script.onerror = function(){ reject(new Error('Network error')); };
+    document.body.appendChild(script);
+  });
+}
+
+async function addBooking(){
+  var customer = document.getElementById('customer').value.trim();
+  var room = document.getElementById('room').value.trim();
+  var checkInDate = document.getElementById('checkInDate').value;
+  var checkInTime = document.getElementById('checkInTime').value;
+  var checkOutTime = document.getElementById('checkOutTime').value;
+  var price = document.getElementById('price').value;
+  if (!customer || !checkInDate || !checkInTime) return alert('Isi nama, tanggal dan jam masuk');
+  var params = { action:'add', customer:customer, room:room, checkInDate:checkInDate, checkInTime:checkInTime, checkOutTime:checkOutTime, price:price };
+  var res = await jsonpCall(params);
+  if (res && res.success) {
+    document.getElementById('addMsg').innerText = 'Tersimpan (ID: ' + res.id + ')';
+    loadRooms();
+    loadList();
+  } else {
+    document.getElementById('addMsg').innerText = 'Error: ' + (res && res.error || 'unknown');
+  }
+}
+
+async function loadList(){
+  var filterDate = document.getElementById('filterDate').value;
+  var room = document.getElementById('filterRoom').value;
+  var params = { action:'list', filterDate: filterDate, room: room };
+  var res = await jsonpCall(params);
+  var tbody = document.querySelector('#tbl tbody'); tbody.innerHTML = '';
+  if (res && res.success) {
+    res.data.forEach(function(r){
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td>'+r.ID+'</td><td>'+r.Customer+'</td><td>'+r.Room+'</td><td>'+r.CheckInDate+'</td><td>'+r.CheckInTime+'</td><td>'+r.CheckOutTime+'</td><td>'+r.Price+'</td>';
+      tbody.appendChild(tr);
+    });
+  }
+}
+
+async function loadRooms(){
+  var sel = document.getElementById('filterRoom');
+  var res = await jsonpCall({ action:'rooms' });
+  sel.innerHTML = '<option value="">-- Semua --</option>';
+  if (res && res.success) {
+    res.rooms.forEach(function(r){ var opt = document.createElement('option'); opt.value=r; opt.textContent=r; sel.appendChild(opt); });
+  }
+}
+
+async function generateReport(){
+  var start = document.getElementById('rStart').value;
+  var end = document.getElementById('rEnd').value;
+  var res = await jsonpCall({ action:'report', startDate: start, endDate: end });
+  var div = document.getElementById('report');
+  if (res && res.success) {
+    div.innerHTML = '<p>Periode: '+(res.start||'-')+' s/d '+(res.end||'-')+'</p><p>Jumlah booking: '+res.count+'</p><p>Total pendapatan: '+Number(res.total).toLocaleString()+'</p>';
+  } else {
+    div.innerText = 'Gagal generate report';
+  }
+}
+
+// event handlers
+document.getElementById('btnAdd').addEventListener('click', addBooking);
+document.getElementById('btnLoad').addEventListener('click', loadList);
+document.getElementById('btnReport').addEventListener('click', generateReport);
+
+// init
+loadRooms(); loadList();
+</script>
+</body>
+</html>
